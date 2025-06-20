@@ -38,14 +38,24 @@ def get_q_vib(temperature, vib_energies):
     Returns
     -------
     q_vib: float
-        Vibrational partition function
+        Vibrational partition function. For a monoatomic gas (no vibrational modes), returns 1.0. 
+        For molecules, computes the product of partition functions for each vibrational mode using the 
+        harmonic oscillator approximation.
 
+    Notes
+    -----
+    The vibrational partition function is calculated as the product over all vibrational modes:
+        q_vib = Π_i [exp(-hv_i/(2kT)) / (1 - exp(-hv_i/(kT)))]
+    where v_i is the vibrational energy (in meV) of mode i, k is the Boltzmann constant (in eV/K), and T is temperature (in K).
     """
     q_vib = 1.0
-    for v in vib_energies:
-        q_vib = q_vib * exp(- v / (1000 * 2 * k_eV * temperature)) / (1 - exp(- v / (1000 * k_eV * temperature)))
-    return q_vib
-
+    
+    if len(vib_energies) == 0:  # monoatomic gas
+        return q_vib
+    else:
+        for v in vib_energies:
+            q_vib = q_vib * exp(- v / (1000 * 2 * k_eV * temperature)) / (1 - exp(- v / (1000 * k_eV * temperature)))
+        return q_vib
 
 def get_q_rot(temperature, inertia_moments: list, sym_number):
     """Calculates the rotational partition function.
@@ -65,20 +75,26 @@ def get_q_rot(temperature, inertia_moments: list, sym_number):
     q_rot_gas: float
         Rotational partition function
 
+    Notes
+    -----
+    For monoatomic gases (no rotational modes), returns 1.0.
+    For linear molecules, uses the rigid rotor approximation.
+    For non-linear molecules, uses the symmetric top approximation.
     """
-
-    if len(inertia_moments) == 1:  # linear
-        i = inertia_moments[0] * atomic_mass / 1.0e20  # from amu*Å2 to kg*m2
-        q_rot_gas = 8 * pi ** 2 * i * k * temperature / (sym_number * h ** 2)
-    elif len(inertia_moments) == 3:  # non-linear
+    if len(inertia_moments) == 0:  # monoatomic gas
+        return 1.0
+    elif len(inertia_moments) == 1:  # linear molecule
+        i = inertia_moments[0] * atomic_mass / 1.0e20  # amu·Å^2 to kg·m^2
+        q_rot_gas = (8 * pi ** 2 * i * k * temperature) / (sym_number * h ** 2)
+        return q_rot_gas
+    elif len(inertia_moments) == 3:  # non-linear molecule
         i_a = inertia_moments[0] * atomic_mass / 1.0e20
         i_b = inertia_moments[1] * atomic_mass / 1.0e20
         i_c = inertia_moments[2] * atomic_mass / 1.0e20
-        q_rot_gas = (sqrt(pi * i_a * i_b * i_c) / sym_number) * (8 * pi ** 2 * k * temperature / h ** 2) ** (3 / 2)
+        q_rot_gas = (sqrt(pi) / sym_number) * ((8 * pi ** 2 * k * temperature / h ** 2) ** 1.5) * sqrt(i_a * i_b * i_c)
+        return q_rot_gas
     else:
-        raise CalcFunctionsError(f"len(inertia_moments) = {len(inertia_moments)}. Valid values are 1 (linear) or 3 "
-                                 f"(non-linear)")
-    return q_rot_gas
+        raise ValueError("inertia_moments must have length 0 (atom), 1 (linear), or 3 (non-linear)")
 
 
 def calc_ads(area_site, molec_mass, temperature, vib_energies_is, vib_energies_ts, vib_energies_fs,
